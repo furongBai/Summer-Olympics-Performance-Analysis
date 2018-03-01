@@ -1,0 +1,299 @@
+---
+title: "Summer Olympics Performance Analysis"
+author: "Furong Bai"
+date: "2017Äê4ÔÂ27ÈÕ"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(shiny)
+# uncomment following if haven't install "gridExtra" package before
+# install.packages("gridExtra")
+library(gridExtra)
+```
+
+## PROBLEM STATEMENT 
+
+Many people like me enjoy watching the Olympic Games, having the valuable and fun time to watch the world top athletes to compete in various sports. People are proud of the success of their country¡¯s athletes, thus number of medals won of a nation is important to national prestige. A glance at the by-country medal tables can clearly tell us that not all the nations have the same ability to win the game. While some countries have dominated the medals in specific sports, others are hardly come into the picture. Hence, there is one question we may want to ask while viewing the games: what makes these countries so successful in the Olympic games? 
+
+In this exercise, I explored Summer Olympics data from 1896-2012, in order to understand the performance of leading countries over year. The objective is to find answers to the following questions:
+
+* What are the top 10 countries in the history of Summer Olympics?
+* How're their performances change over time?
+* Which gender won more medals in summer Olympic? Did the pattern changed over time?
+* What is the impact of socioeconomic variables on national performance in Summer Olympic games? (GDP, Population & per capita GDP)
+
+```{r, echo=FALSE}
+# input dataset 
+# change the file location if needed
+summer <- read.csv("summer.csv")
+dictionary <- read.csv("dictionary.csv")
+```
+
+
+## Data Preparation 
+
+#### Explore the data sets
+First Check the structure of the data.Original data sets were from Kaggle. 
+```{r, echo=FALSE, results="hide"}
+# understand the structure of the data
+head(summer)
+str(summer)
+```
+"summer" data-set listed information for each medal winner and each medal won. It contained 31165 observations and 9 variable as following:
+
+1. Year: year of the Olympics
+2. City: host city
+3. Sport: type of sport
+4. Discipline: field of sport
+5. Athlete: athlete's name
+6. Country: which country the athlete belonged to
+7. Gender: athlete's gender
+8. Event: specific Olympic event
+9. Medal: type of medal won: gold, silver or bronze
+
+
+```{r, echo=FALSE, results="hide"}
+head(dictionary)
+str(dictionary)
+```
+"dictionary" data-set included the general information of participated countries. It contained 201 observations and 4 variables listed as following:
+
+1. Country: country name
+2. Code: country code
+3. Population: country's population
+4. GDP.per.Capita: per capita GDP in the country
+
+  
+#### Missing values & outliers
+Then check the missing values and outliers within the data.
+```{r}
+sapply(summer, function(x) sum(is.na(x)))
+sapply(dictionary, function(x) sum(is.na(x)))
+```
+* no missing values in "summer" data set 
+* "dictionary" data set contained missing values: 5 missing in Population and 25 missing in GDP.per.Capita
+
+Boxplots show that outliers or extreme values may exist in the data-set.
+```{r echo=FALSE, warning=FALSE,fig.width=10, fig.height=1.5}
+# construct boxplot to check outliers for numerical variables
+dictionary %>% ggplot(aes(x = 1, y = Population)) + geom_boxplot() + coord_flip() 
+dictionary %>% ggplot(aes(x = 1, y = GDP.per.Capita)) + geom_boxplot() + coord_flip()
+```
+
+* Following showed the extreme values in Population:
+```{r echo=FALSE}
+# filter out extreme values in Population
+filter(dictionary,Population>1000000000)
+```
+
+* Following showed the extreme values in GDP.per.Capita:
+```{r echo=FALSE}
+# filter out extreme values in GDP.per.Capita?
+filter(dictionary,GDP.per.Capita>62500)
+```
+
+* Values for these outliers were reasonable. 
+    + Two extreme values in Population were India and China. 
+    + Four extreme values in per capita GDP were Luxembourg, Norway, Qatar and Switzerland. 
+* Their values were actual and make sense 
+* Thus I didn't exclude these entries in analysis.
+
+
+
+## Data Analysis 
+
+#### What are the top 10 countries in history of Olympics?
+```{r analysis, echo=FALSE}
+# Add the count variable to make changes to the orginal dataset
+count <- rep(1,nrow(summer))
+summer <- cbind(summer,count)
+
+# Summarize total medal counts by Country by Medal: by_country_medel
+by_country_medal <- summer %>% 
+  group_by(Country, Medal) %>% 
+  summarize(Count = sum(count)) 
+
+# make a tidy medal tally
+medal_table <- by_country_medal %>% 
+  spread(key=Medal,value=Count) %>%    # create columns for each type of medal
+  mutate(Total=Gold+Silver+Bronze ) %>%   # create a new column i.e. total medal count
+  arrange(desc(Total)) %>%                # arrange rows in descending rank of total medal 
+  select(Country,Gold,Silver,Bronze,Total)   # reorder the columns
+
+# Filter the top 10 countries in total amount of medals
+top_10 <- medal_table[1:10,]
+# Print out the result table
+top_10
+
+# save top 10 countries code
+top_10_names <- as.character(top_10[1:10,]$Country)
+
+# save top 10 countries code
+top_5_names <- as.character(top_10[1:5,]$Country)
+```
+
+#### What are the top 10 countries in 2012 Olympics?
+* Some countries were leading in 2012 Olympics Medal Tally but didn't show up in overall Medal Tally, such as Russia, China, Japan.
+* USA won the most medals in 2012 and overall history.
+```{r, echo=FALSE, warning=FALSE}
+# Summarize total medal counts by Country by Year: by_country_year
+by_country_year <-  summer %>% 
+  group_by(Country, Year) %>%
+  summarize(TotalMedal = sum(count))
+
+# Filter the 2012 Olympics and arrage in medal rank
+by_country_year_2012 <-  by_country_year %>% 
+  filter(Year == 2012) %>%
+  arrange(desc(TotalMedal))
+
+# Filter the top 10 nations in 2012 Olympics  
+top10_2012 <- by_country_year_2012[1:10,]  
+top10_2012
+```
+
+```{r echo=FALSE, results="hide"}
+by_country_year_medal <-  summer %>% 
+  group_by(Country, Year, Medal) %>%
+  summarize(Count = sum(count)) 
+```
+
+## Visualization
+
+#### Which countries won the most medals in history of Olympics?
+```{r, echo=FALSE, fig.width=10, fig.height=7}
+# filter out top 10 countries from by_country_medal table
+by_country_medal_top10 <- by_country_medal %>% filter(Country %in% top_10_names) 
+
+# plot top 10 countries' medal count
+by_country_medal_top10 %>% 
+  ggplot(aes(x=reorder(Country,Count),y=Count, fill=Medal)) + 
+  geom_bar(stat="identity") +
+  ggtitle("Bar Chart of Medal Counts For Top 10 Countries") +
+  labs(x="Country",y="Medal Count") +
+  theme(plot.title = element_text(face="bold", size=14, hjust=0.5)) +
+  theme(axis.title = element_text(face="bold")) 
+
+```
+
+The above graph shows the leading countries in medal tally. Followings are some findings in the graph:
+
+* U.S. won the most amount of medals in history of summer Olympics. Its total medals was above 4500 and was about double of 2nd country in medal tally. Gold medals occupied the highest share compared to silver and bronze.
+* Although Soviet Union broke down in 1980s, it still won 2nd highest amount of medals in the history of Olympics. 
+
+
+
+#### What was the top 10 countries in each year?
+
+* In different year, top 10 countries in the medal tally changed.
+* Some countries dropped out of the top list over time and some countries emerged into top list in recent years.
+* **Year 1916 1940, & 1944 didn't hold Olympics due to the world war.**
+* Select year you want to check which are the top 10 countries in that year.
+```{r, echo = FALSE, fig.width=10, fig.height=7}
+sliderInput(inputId = "year", label = "Select Year:", min = 1896, max = 2012, value = 2012, step=4, width="200%")
+
+renderPlot({
+  top10_selected_year <- by_country_year %>% 
+    filter(Year == input$year) %>% 
+    arrange(desc(TotalMedal))
+  top10_selected_year <- top10_selected_year[1:10,]
+  
+  appdata <- by_country_year_medal %>% filter(Country %in% as.character(top10_selected_year$Country))
+
+  # draw the bar-chart for year slected
+  ggplot(appdata,aes(x=reorder(Country, Count), y=Count, fill=Medal)) +
+    geom_bar(stat="identity")+
+    ggtitle(paste("Bar Chart of Medal Counts For Top 10 Countries in Year ", input$year)) +
+  labs(x="Country",y="Medal Count") +
+  theme(plot.title = element_text(face="bold", size=14, hjust=0.5)) +
+  theme(axis.title = element_text(face="bold")) 
+})
+```
+
+#### How did performance of top 5 countries in Olympic history change over time?
+```{r perf_change, echo=FALSE,fig.width=10, fig.height=5}
+
+# Filter the top 10 countries in total amount of medals  
+by_country_year_top5 <-  by_country_year %>% filter(Country %in% top_5_names)
+
+# plot scatter graph with line to show tendency in change
+by_country_year_top5 %>% 
+  ggplot(aes(x=Year,y=TotalMedal,group=Country,col=Country)) + 
+  geom_point() + 
+  geom_line(size=1) +
+  labs(x="Year",y="Total Medal Count") +
+  ggtitle("Change of Top 5 Countries' Total Medal Count Over Time") +
+  theme(plot.title = element_text(face="bold", size=14, hjust=0.5)) +
+  theme(axis.title = element_text(face="bold")) 
+
+```
+
+As we can see from the graph above:
+
+* Most of these countries attended Olympic games since invention of the game. 
+* USA was keeping consistently high performer over time.
+* Soviet Union won about 450 medals in 1980, highest ever among all summer Olympic games.
+* China didn't come into the picture maybe because it joined Olympics late.
+
+
+#### What makes some countries so succefful in Olymics?
+
+* Is there an relationship between some social-economic variables and total medal won?
+* Focus on Year 2012.
+* Assumption:
+    + With larger population, the country may have larger pool of talents.
+    + With greater GDP per capita, the country may have greater ability to invest on sports.
+  
+* Graphs show the scatter plot and relationship between two social-economic variables and total medals.
+```{r relationship, echo=FALSE, warning=FALSE, message=FALSE,fig.width=10, fig.height=7}
+# Adjust the variable name in "dictionary" corresponding to "summer" because we want to joint two tables later
+names(dictionary)[1] <- "CountryFullName"
+names(dictionary)[2] <- "Country"
+
+# Make table of Countries' TotalMedal and socialeconomic variables
+country_table <- by_country_year %>% 
+  inner_join(dictionary,by=c("Country")) %>% # joint two tables based on Country Code
+  filter(Year==2012) %>% # Filter out data in Year 2012
+  mutate(Pop.million=Population/1000000 ) 
+
+# Relationship between Popoulation & TotalMedal 
+p1 <-ggplot(country_table, mapping=aes(x=Pop.million, y = TotalMedal)) +
+    geom_point(na.rm=T) +  
+    scale_x_log10(expression("Population in million people (log10)")) +
+    geom_smooth(se=F,na.rm=T) +
+    stat_smooth(method="lm", col="red", se=F, size=0.5,na.rm=T) +
+    labs(y="Total Medal Count") +
+    ggtitle("Relationship Between Population & Medal Count") +
+    theme(plot.title = element_text(face="bold", size=12, hjust=0.5)) +
+    theme(axis.title = element_text(face="bold")) 
+
+# Relationship between GDP per capita & TotalMedal 
+p2 <-ggplot(country_table, mapping=aes(x=GDP.per.Capita, y = TotalMedal)) +
+    geom_point(na.rm=T) +  
+    scale_x_log10(expression("GDP.per.Capita (log10)")) +
+    geom_smooth(se=F,na.rm=T) +
+    stat_smooth(method="lm", col="red", se=F, size=0.5,na.rm=T) +
+    labs(y="Total Medal Count") +
+    ggtitle("Relationship Between per capita GDP & Medal Count") +
+    theme(plot.title = element_text(face="bold", size=12, hjust=0.5)) +
+    theme(axis.title = element_text(face="bold")) 
+
+grid.arrange(p1, p2, ncol=2)
+```
+
+* Finally, tit a linear regression model, the output of the model is listed below.
+    + Intercepts for log(Pop.million) - 14.563;
+    + Intercepts for log(Pop.million) - 16.551;
+    + Detailed results were listed below:
+```{r, echo=FALSE}
+#Fitting a linear regression model 
+model <- lm(TotalMedal ~ log(Pop.million) + log(GDP.per.Capita), data=country_table)
+summary(model)
+```
+
+
